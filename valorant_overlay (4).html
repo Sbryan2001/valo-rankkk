@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Valorant Rank Overlay</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: transparent; font-family: 'Arial', sans-serif; }
+  #overlay {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(15, 10, 20, 0.82);
+    border: 1px solid rgba(255, 70, 85, 0.4);
+    border-radius: 6px;
+    padding: 7px 14px;
+    min-width: 180px;
+  }
+  #rank-icon { width: 36px; height: 36px; object-fit: contain; flex-shrink: 0; }
+  #rank-icon-fallback {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(255,70,85,0.2); border: 1px solid rgba(255,70,85,0.5);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #ff4655; font-weight: 700; flex-shrink: 0;
+  }
+  .info { display: flex; flex-direction: column; gap: 1px; }
+  #rank-name { font-size: 15px; font-weight: 700; color: #ffffff; letter-spacing: 0.5px; text-transform: uppercase; }
+  #rr-bar-wrap { display: flex; align-items: center; gap: 6px; }
+  #rr-track { width: 90px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; overflow: hidden; }
+  #rr-fill { height: 100%; background: #ff4655; border-radius: 2px; transition: width 0.6s ease; }
+  #rr-text { font-size: 12px; color: rgba(255,255,255,0.7); font-weight: 500; min-width: 42px; }
+  #status { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+</style>
+</head>
+<body>
+<div id="overlay">
+  <div id="rank-icon-fallback">?</div>
+  <div class="info">
+    <span id="rank-name">Chargement...</span>
+    <div id="rr-bar-wrap">
+      <div id="rr-track"><div id="rr-fill" style="width:0%"></div></div>
+      <span id="rr-text">-- RR</span>
+    </div>
+    <span id="status">Mise à jour...</span>
+  </div>
+</div>
+
+<script>
+const NAME = "AKAWaness";
+const TAG  = "0517";
+const REGION = "eu";
+const API_KEY = "HDEV-b3ef03fc-2fb7-42d0-b8a0-3cedb6f95361";
+const API = `https://api.henrikdev.xyz/valorant/v2/mmr/${REGION}/${encodeURIComponent(NAME)}/${encodeURIComponent(TAG)}?api_key=${API_KEY}`;
+
+const RANK_COLORS = {
+  "Iron":"#8a8a8a","Bronze":"#a05c2e","Silver":"#b0b8c8",
+  "Gold":"#d4a843","Platinum":"#4fc3c3","Diamond":"#9b6dff",
+  "Ascendant":"#2db87a","Immortal":"#c83050","Radiant":"#ffe45e"
+};
+
+// Garde les dernières données en mémoire
+let lastGoodData = null;
+
+async function fetchRank() {
+  try {
+    const res = await fetch(API);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.status !== 200) throw new Error(data?.errors?.[0]?.message || "Erreur API");
+
+    const current = data.data.current_data;
+    lastGoodData = current; // sauvegarde
+    renderData(current);
+
+  } catch(e) {
+    console.warn("Refresh raté:", e.message);
+    // Si on a des données précédentes, on les garde affichées — pas d'erreur visible
+    if (lastGoodData) {
+      const now = new Date();
+      document.getElementById("status").textContent = `⚠ ${now.getHours()}:${String(now.getMinutes()).padStart(2,"0")}`;
+    } else {
+      document.getElementById("rank-name").textContent = "Erreur";
+      document.getElementById("status").textContent = e.message;
+    }
+  }
+}
+
+function renderData(current) {
+  const rankFull = current.currenttierpatched || "Unknown";
+  const rr = current.ranking_in_tier ?? 0;
+  const imgUrl = current.images?.small || null;
+  const rankBase = rankFull.split(" ")[0];
+  const color = RANK_COLORS[rankBase] || "#ff4655";
+
+  document.getElementById("rank-name").textContent = rankFull;
+  document.getElementById("rank-name").style.color = color;
+  document.getElementById("rr-text").textContent = `${rr} RR`;
+  document.getElementById("rr-fill").style.width = `${Math.min(rr, 100)}%`;
+  document.getElementById("rr-fill").style.background = color;
+  document.getElementById("overlay").style.borderColor = color + "66";
+
+  if (imgUrl) {
+    let img = document.getElementById("rank-icon");
+    if (!img) {
+      img = document.createElement("img");
+      img.id = "rank-icon"; img.alt = rankFull;
+      const fallback = document.getElementById("rank-icon-fallback");
+      fallback.style.display = "none";
+      fallback.parentNode.insertBefore(img, fallback);
+    }
+    img.src = imgUrl;
+  } else {
+    document.getElementById("rank-icon-fallback").textContent = rankFull.slice(0,2).toUpperCase();
+  }
+
+  const now = new Date();
+  document.getElementById("status").textContent = `Mis à jour ${now.getHours()}:${String(now.getMinutes()).padStart(2,"0")}`;
+}
+
+fetchRank();
+setInterval(fetchRank, 5 * 60 * 1000); // refresh toutes les 5 min
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:transparent; font-family:'Arial', sans-serif; padding:16px; }
+
+  #bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(10, 10, 10, 0.82);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 9px 18px;
+    min-width: 200px;
+    max-width: 360px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+
+  #bar.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  #spotify-icon {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+  }
+
+  .text { display:flex; flex-direction:column; gap:1px; overflow:hidden; }
+
+  #track {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #artist {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <svg id="spotify-icon" viewBox="0 0 24 24" fill="#1DB954" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+  </svg>
+  <div class="text">
+    <span id="track">—</span>
+    <span id="artist">—</span>
+  </div>
+</div>
+
+<script>
+const CLIENT_ID     = "4dc2be69db0b43e8914b5289d901cff3";
+const CLIENT_SECRET = "092be9d0985d41848d061c6214d1928a";
+const REFRESH_TOKEN = "AQCdPsGyuERAyXUmDPlDooxhBRt14jx2WrweRhq5vs7nEF-qRpuwY1tGbVvP5TEOh8r9c0igdt-uf6-UPHEI1tStzE4MkY7Ap_uhrhZP-e_09FHSc3KT8VmpXDgfZRALCq0";
+
+const bar    = document.getElementById('bar');
+const trackEl  = document.getElementById('track');
+const artistEl = document.getElementById('artist');
+
+let accessToken = null;
+let lastTrackId = null;
+
+async function refreshAccessToken() {
+  const res = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Authorization": "Basic " + btoa(CLIENT_ID + ":" + CLIENT_SECRET)
+    },
+    body: `grant_type=refresh_token&refresh_token=${REFRESH_TOKEN}`
+  });
+  const data = await res.json();
+  accessToken = data.access_token;
+}
+
+async function fetchCurrentTrack() {
+  if (!accessToken) await refreshAccessToken();
+
+  try {
+    const res = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
+      headers: { "Authorization": `Bearer ${accessToken}` }
+    });
+
+    if (res.status === 401) {
+      await refreshAccessToken();
+      return fetchCurrentTrack();
+    }
+
+    if (res.status === 204 || !res.ok) {
+      // Rien en lecture
+      bar.classList.remove('visible');
+      lastTrackId = null;
+      return;
+    }
+
+    const data = await res.json();
+
+    if (!data || !data.is_playing || !data.item) {
+      bar.classList.remove('visible');
+      lastTrackId = null;
+      return;
+    }
+
+    const track  = data.item.name;
+    const artist = data.item.artists.map(a => a.name).join(", ");
+    const id     = data.item.id;
+
+    if (id !== lastTrackId) {
+      trackEl.textContent  = track;
+      artistEl.textContent = artist;
+      lastTrackId = id;
+    }
+
+    bar.classList.add('visible');
+
+  } catch(e) {
+    console.warn("Spotify fetch error:", e);
+  }
+}
+
+// Refresh token toutes les 55 min
+setInterval(refreshAccessToken, 55 * 60 * 1000);
+
+// Poll toutes les 10 secondes
+fetchCurrentTrack();
+setInterval(fetchCurrentTrack, 10000);
+</script>
+</body>
+</html>
